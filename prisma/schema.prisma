@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AssignmentStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum AssignmentPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Organization {
+  id          String       @id @default(uuid())
+  name        String
+  slug        String       @unique
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  users       User[]
+  couriers    Courier[]
+  assignments Assignment[]
+}
+
+model User {
+  id               String        @id @default(uuid())
+  organizationId   String
+  email            String        @unique
+  firstName        String
+  lastName         String
+  passwordHash     String
+  status           String        @default("ACTIVE")
+  role             String        @default("Dispatcher")
+  emailVerifiedAt  DateTime?
+  emailVerificationToken String?
+  resetPasswordToken String?
+  resetPasswordExpiresAt DateTime?
+  lastLoginAt      DateTime?
+  refreshTokenHash String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model Courier {
+  id             String        @id @default(uuid())
+  organizationId String
+  name           String
+  phone          String?
+  isOnline       Boolean       @default(false)
+  lastLatitude   Float?
+  lastLongitude  Float?
+  lastUpdatedAt  DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignments    Assignment[]
+}
+
+model Assignment {
+  id             String        @id @default(uuid())
+  organizationId String
+  courierId      String?
+  title          String
+  description    String
+  pickupAddress  String?
+  pickupLatitude Float?
+  pickupLongitude Float?
+  dropoffAddress String?
+  dropoffLatitude Float?
+  dropoffLongitude Float?
+  status         AssignmentStatus @default(PENDING)
+  priority       AssignmentPriority @default(MEDIUM)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  courier        Courier?      @relation(fields: [courierId], references: [id], onDelete: SetNull)
+}

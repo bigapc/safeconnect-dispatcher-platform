@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@safeconnect/auth": ["packages/auth/src"],
+      "@safeconnect/database": ["packages/database/src"],
+      "@safeconnect/ui": ["packages/ui/src"],
+      "@safeconnect/notifications": ["packages/notifications/src"],
+      "@safeconnect/maps": ["packages/maps/src"],
+      "@safeconnect/ai": ["packages/ai/src"],
+      "@safeconnect/billing": ["packages/billing/src"],
+      "@safeconnect/config": ["packages/config/src"]
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2022",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "incremental": true,
+    "paths": {
+      "@/*": ["src/*"],
+      "@safeconnect/auth": ["../../packages/auth/src"],
+      "@safeconnect/notifications": ["../../packages/notifications/src"],
+      "@safeconnect/billing": ["../../packages/billing/src"],
+      "@safeconnect/maps": ["../../packages/maps/src"],
+      "@safeconnect/ai": ["../../packages/ai/src"],
+      "@safeconnect/database": ["../../packages/database/src"],
+      "@safeconnect/config": ["../../packages/config/src"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

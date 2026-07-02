@@ -1,0 +1,331 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+  DISABLED
+}
+
+enum AssignmentStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum AssignmentPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  IN_APP
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+model Organization {
+  id                String                @id @default(uuid())
+  name              String
+  slug              String                @unique
+  isActive          Boolean               @default(true)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  users             User[]
+  dispatchers       Dispatcher[]
+  couriers          Courier[]
+  assignments       Assignment[]
+  incidents         Incident[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  subscription      Subscription?
+  invoices          Invoice[]
+  webhooks          Webhook[]
+  gpsLocations      GPSLocation[]
+  settings          OrganizationSettings?
+  analyticsSnapshot AnalyticsSnapshot[]
+}
+
+model User {
+  id                     String      @id @default(uuid())
+  organizationId         String?
+  email                  String      @unique
+  firstName              String
+  lastName               String
+  phone                  String?
+  passwordHash           String
+  status                 UserStatus  @default(ACTIVE)
+  emailVerifiedAt        DateTime?
+  emailVerificationToken String?
+  resetPasswordToken     String?
+  resetPasswordExpiresAt DateTime?
+  refreshTokenHash       String?
+  lastLoginAt            DateTime?
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
+  organization           Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  dispatcher             Dispatcher?
+  courier                Courier?
+  auditLogs              AuditLog[]
+  userRoles              UserRole[]
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  description String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  userRoles   UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  code        String           @unique
+  description String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  roles       RolePermission[]
+}
+
+model UserRole {
+  id        String   @id @default(uuid())
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime   @default(now())
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+model Dispatcher {
+  id             String      @id @default(uuid())
+  organizationId String
+  userId         String      @unique
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Courier {
+  id             String      @id @default(uuid())
+  organizationId String
+  userId         String      @unique
+  vehicleType    String?
+  isOnline       Boolean     @default(false)
+  lastLatitude   Float?
+  lastLongitude  Float?
+  lastUpdatedAt  DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments    Assignment[]
+  gpsLocations   GPSLocation[]
+}
+
+model Assignment {
+  id               String           @id @default(uuid())
+  organizationId   String
+  courierId        String?
+  title            String
+  description      String
+  pickupAddress    String?
+  pickupLatitude   Float?
+  pickupLongitude  Float?
+  dropoffAddress   String?
+  dropoffLatitude  Float?
+  dropoffLongitude Float?
+  status           AssignmentStatus @default(PENDING)
+  priority         AssignmentPriority @default(MEDIUM)
+  completedAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  courier          Courier?         @relation(fields: [courierId], references: [id], onDelete: SetNull)
+  incidents        Incident[]
+}
+
+model Incident {
+  id               String           @id @default(uuid())
+  organizationId   String
+  assignmentId     String?
+  title            String
+  description      String
+  severity         IncidentSeverity
+  status           IncidentStatus   @default(OPEN)
+  occurredAt       DateTime         @default(now())
+  resolvedAt       DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignment       Assignment?      @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+}
+
+model Notification {
+  id               String              @id @default(uuid())
+  organizationId   String
+  userId           String?
+  channel          NotificationChannel
+  status           NotificationStatus  @default(PENDING)
+  subject          String
+  body             String
+  sentAt           DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id             String      @id @default(uuid())
+  organizationId String?
+  userId         String?
+  action         String
+  entityType     String
+  entityId       String
+  metadata       Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime    @default(now())
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  user           User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model Subscription {
+  id                      String             @id @default(uuid())
+  organizationId          String             @unique
+  stripeCustomerId        String             @unique
+  stripeSubscriptionId    String             @unique
+  plan                    String
+  status                  SubscriptionStatus
+  currentPeriodStart      DateTime
+  currentPeriodEnd        DateTime
+  cancelAtPeriodEnd       Boolean            @default(false)
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  organization            Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model Invoice {
+  id                   String       @id @default(uuid())
+  organizationId       String
+  stripeInvoiceId      String       @unique
+  amountCents          Int
+  currency             String
+  status               InvoiceStatus
+  issuedAt             DateTime
+  paidAt               DateTime?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model Webhook {
+  id               String    @id @default(uuid())
+  organizationId   String?
+  provider         String
+  eventType        String
+  payload          Json
+  processedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  organization     Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+}
+
+model GPSLocation {
+  id             String      @id @default(uuid())
+  organizationId String
+  courierId      String
+  latitude       Float
+  longitude      Float
+  speedKph       Float?
+  heading        Float?
+  recordedAt     DateTime    @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  courier        Courier     @relation(fields: [courierId], references: [id], onDelete: Cascade)
+}
+
+model OrganizationSettings {
+  id                         String       @id @default(uuid())
+  organizationId             String       @unique
+  timezone                   String       @default("UTC")
+  currency                   String       @default("USD")
+  defaultIncidentEscalationMins Int      @default(15)
+  createdAt                  DateTime     @default(now())
+  updatedAt                  DateTime     @updatedAt
+  organization               Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model AnalyticsSnapshot {
+  id                     String       @id @default(uuid())
+  organizationId         String
+  snapshotDate           DateTime
+  assignmentsCreated     Int          @default(0)
+  assignmentsCompleted   Int          @default(0)
+  incidentCount          Int          @default(0)
+  activeCouriers         Int          @default(0)
+  revenueCents           Int          @default(0)
+  createdAt              DateTime     @default(now())
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, snapshotDate])
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@safeconnect/notifications",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^6.4.17"
+  },
+  "dependencies": {
+    "nodemailer": "^6.10.1",
+    "twilio": "^5.8.0"
+  }
+}

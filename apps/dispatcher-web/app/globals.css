@@ -1,0 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+@import 'mapbox-gl/dist/mapbox-gl.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f4f7f7;
+  --foreground: #102225;
+  --muted: #d7e3df;
+  --card: #ffffff;
+  --border: #d0dcda;
+  --primary: #0ca582;
+  --accent: #0f8b6d;
+  --danger: #b42318;
+}
+
+.dark {
+  --background: #061217;
+  --foreground: #e6f4f1;
+  --muted: #10323a;
+  --card: #0c1f26;
+  --border: #1e3d47;
+  --primary: #1dd3aa;
+  --accent: #0ca582;
+  --danger: #f97066;
+}
+
+* {
+  @apply border-border;
+}
+
+body {
+  font-family: 'IBM Plex Sans', sans-serif;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(12, 165, 130, 0.16), transparent 42%),
+    radial-gradient(circle at 88% 20%, rgba(2, 132, 199, 0.14), transparent 45%),
+    linear-gradient(180deg, var(--background), color-mix(in srgb, var(--background) 78%, #ffffff));
+  color: var(--foreground);
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fadeUp 320ms ease-out both;
+}
+
+.courier-marker {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.16);
+}
+
+.courier-marker-online {
+  background: #0ca582;
+}
+
+.courier-marker-busy {
+  background: #f59e0b;
+}
+
+.courier-marker-offline {
+  background: #6b7280;
+}
