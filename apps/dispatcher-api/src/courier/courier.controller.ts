@@ -5,9 +5,11 @@ import {
   ForbiddenException,
   Get,
   Patch,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
+import type { AssignmentStatus } from '@prisma/client';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RealtimeGateway } from '@/realtime/realtime.gateway';
@@ -32,11 +34,30 @@ export class CourierController {
   ) {}
 
   @Get('map-state')
-  async getMapState(@Req() request: { user: JwtRequestUser }): Promise<unknown> {
+  async getMapState(
+    @Req() request: { user: JwtRequestUser },
+    @Query('couriersPage') couriersPage = '1',
+    @Query('couriersLimit') couriersLimit = '100',
+    @Query('assignmentsPage') assignmentsPage = '1',
+    @Query('assignmentsLimit') assignmentsLimit = '100',
+    @Query('assignmentStatus') assignmentStatus?: string,
+    @Query('sortOrder') sortOrder = 'desc',
+  ): Promise<unknown> {
     const organizationId = request.user.orgId;
     if (!organizationId) {
       return { success: false, data: { couriers: [], assignments: [] } };
     }
+
+    const couriersPageValue = Math.max(1, Number.parseInt(couriersPage, 10) || 1);
+    const couriersLimitValue = Math.min(200, Math.max(1, Number.parseInt(couriersLimit, 10) || 100));
+    const couriersSkip = (couriersPageValue - 1) * couriersLimitValue;
+
+    const assignmentsPageValue = Math.max(1, Number.parseInt(assignmentsPage, 10) || 1);
+    const assignmentsLimitValue = Math.min(200, Math.max(1, Number.parseInt(assignmentsLimit, 10) || 100));
+    const assignmentsSkip = (assignmentsPageValue - 1) * assignmentsLimitValue;
+    const parsedAssignmentStatus = this.parseAssignmentStatus(assignmentStatus);
+
+    const direction = sortOrder.toLowerCase() === 'asc' ? 'asc' : 'desc';
 
     const [couriers, assignments] = await Promise.all([
       this.prisma.courier.findMany({
@@ -72,10 +93,17 @@ export class CourierController {
             },
           },
         },
+        skip: couriersSkip,
+        take: couriersLimitValue,
       }),
       this.prisma.assignment.findMany({
         where: {
           organizationId,
+          ...(parsedAssignmentStatus
+            ? {
+                status: parsedAssignmentStatus,
+              }
+            : {}),
           OR: [
             {
               pickupLatitude: { not: null },
@@ -106,8 +134,10 @@ export class CourierController {
           updatedAt: true,
         },
         orderBy: {
-          updatedAt: 'desc',
+          updatedAt: direction,
         },
+        skip: assignmentsSkip,
+        take: assignmentsLimitValue,
       }),
     ]);
 
@@ -220,5 +250,15 @@ export class CourierController {
     this.realtime.emitCourierStatusChanged(organizationId, payload);
 
     return { success: true, data: payload };
+  }
+
+  private parseAssignmentStatus(value?: string): AssignmentStatus | undefined {
+    if (!value) {
+      return undefined;
+    }
+
+    const normalized = value.toUpperCase();
+    const statuses: AssignmentStatus[] = ['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+    return statuses.includes(normalized as AssignmentStatus) ? (normalized as AssignmentStatus) : undefined;
   }
 }

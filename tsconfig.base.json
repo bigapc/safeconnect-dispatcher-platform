@@ -3,6 +3,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "ignoreDeprecations": "5.0",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -23,7 +24,8 @@
       "@safeconnect/maps": ["packages/maps/src"],
       "@safeconnect/ai": ["packages/ai/src"],
       "@safeconnect/billing": ["packages/billing/src"],
-      "@safeconnect/config": ["packages/config/src"]
+      "@safeconnect/config": ["packages/config/src"],
+      "@safeconnect/academy": ["packages/academy/src"]
     }
   }
 }

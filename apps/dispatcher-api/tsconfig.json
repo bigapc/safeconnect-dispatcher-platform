@@ -11,8 +11,9 @@
     "target": "ES2022",
     "sourceMap": true,
     "outDir": "./dist",
+    "rootDir": "./src",
     "baseUrl": "./",
-    "incremental": true,
+    "incremental": false,
     "paths": {
       "@/*": ["src/*"],
       "@safeconnect/auth": ["../../packages/auth/src"],
@@ -21,7 +22,8 @@
       "@safeconnect/maps": ["../../packages/maps/src"],
       "@safeconnect/ai": ["../../packages/ai/src"],
       "@safeconnect/database": ["../../packages/database/src"],
-      "@safeconnect/config": ["../../packages/config/src"]
+      "@safeconnect/config": ["../../packages/config/src"],
+      "@safeconnect/academy": ["../../packages/academy/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*.ts"],

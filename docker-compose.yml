@@ -1,0 +1,64 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: safeconnect-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: safeconnect
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d safeconnect']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+
+  redis:
+    image: redis:7-alpine
+    container_name: safeconnect-redis
+    command: ['redis-server', '--appendonly', 'yes']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redisdata:/data
+    ports:
+      - '6379:6379'
+
+  dispatcher-api:
+    build:
+      context: .
+      dockerfile: apps/dispatcher-api/Dockerfile
+    container_name: safeconnect-dispatcher-api
+    env_file:
+      - .env.development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - '3001:3001'
+
+  dispatcher-web:
+    build:
+      context: .
+      dockerfile: apps/dispatcher-web/Dockerfile
+    container_name: safeconnect-dispatcher-web
+    env_file:
+      - apps/dispatcher-web/.env.development
+    depends_on:
+      - dispatcher-api
+    ports:
+      - '3000:3000'
+
+volumes:
+  pgdata:
+  redisdata:

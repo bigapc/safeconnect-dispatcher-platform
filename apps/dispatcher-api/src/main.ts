@@ -5,6 +5,7 @@ import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import csurf from 'csurf';
+import { sanitizationMiddleware } from '@/reliability/sanitization.middleware';
 import { AppModule } from './app.module';
 import { loadEnvironment } from './config/env';
 
@@ -17,6 +18,7 @@ async function bootstrap(): Promise<void> {
   app.use(json({ limit: '1mb' }));
   app.use(urlencoded({ extended: true, limit: '1mb' }));
   app.use(cookieParser());
+  app.use(sanitizationMiddleware);
 
   if (env.NODE_ENV === 'production') {
     app.use(
@@ -31,7 +33,7 @@ async function bootstrap(): Promise<void> {
   }
 
   app.enableCors({
-    origin: [env.APP_URL],
+    origin: env.CORS_ALLOWED_ORIGINS,
     credentials: true,
   });
 

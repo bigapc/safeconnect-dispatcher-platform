@@ -4,9 +4,11 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import type { NotificationRelatedEntityType, NotificationType } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
+import type { NotificationChannel, NotificationStatus } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RealtimeGateway } from '@/realtime/realtime.gateway';
+import { JobService } from '@/reliability/job.service';
 import { EmailService } from './email.service';
 import { SmsService } from './sms.service';
 import {
@@ -25,11 +27,11 @@ interface JwtRequestUser {
 interface NotificationPayload {
   organizationId: string;
   userId?: string | null;
-  type: NotificationType;
+  channel: NotificationChannel;
   title: string;
   message: string;
-  status: 'PENDING' | 'SENT' | 'FAILED';
-  relatedEntityType: NotificationRelatedEntityType;
+  status: NotificationStatus;
+  relatedEntityType?: string;
   relatedEntityId?: string | null;
 }
 
@@ -54,6 +56,7 @@ export class NotificationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
+    private readonly jobService: JobService,
     private readonly emailService: EmailService,
     private readonly smsService: SmsService,
   ) {}
@@ -61,43 +64,63 @@ export class NotificationService {
   async listNotifications(
     user: JwtRequestUser,
     filters: {
-      type?: NotificationType;
+      channel?: NotificationChannel;
+      status?: 'PENDING' | 'SENT' | 'FAILED' | 'READ';
       onlyUnread?: boolean;
+      page?: number;
       limit?: number;
+      sortOrder?: string;
     },
   ) {
     const organizationId = this.requireOrganization(user);
     const isAdmin = this.isAdmin(user.role);
 
-    const notifications = await this.prisma.notification.findMany({
-      where: {
-        organizationId,
-        ...(filters.type
-          ? {
-              type: filters.type,
-            }
-          : {}),
-        ...(filters.onlyUnread
-          ? {
-              isRead: false,
-            }
-          : {}),
-        OR: [{ userId: null }, { userId: user.sub }],
-        ...(isAdmin
-          ? {}
-          : {
-              relatedEntityType: {
-                not: 'SYSTEM',
-              },
-            }),
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      take: filters.limit ?? 50,
-    });
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const limit = filters.limit && filters.limit > 0 ? Math.min(filters.limit, 100) : 25;
+    const skip = (page - 1) * limit;
+    const sortOrder = filters.sortOrder?.toLowerCase() === 'asc' ? 'asc' : 'desc';
 
-    return notifications;
+    const where: Prisma.NotificationWhereInput = {
+      organizationId,
+      ...(filters.channel
+        ? {
+            channel: filters.channel,
+          }
+        : {}),
+      ...(filters.status
+        ? {
+            status: filters.status,
+          }
+        : {}),
+      ...(filters.onlyUnread
+        ? {
+            status: {
+              not: 'READ' as NotificationStatus,
+            },
+          }
+        : {}),
+      ...(isAdmin ? {} : {}),
+    };
+
+    const [total, notifications] = await this.prisma.$transaction([
+      this.prisma.notification.count({ where }),
+      this.prisma.notification.findMany({
+        where,
+        orderBy: {
+          createdAt: sortOrder,
+        },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return {
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      data: notifications,
+    };
   }
 
   async markAsRead(user: JwtRequestUser, notificationId: string): Promise<{ success: true }> {
@@ -107,7 +130,6 @@ export class NotificationService {
       where: {
         id: notificationId,
         organizationId,
-        OR: [{ userId: null }, { userId: user.sub }],
       },
       select: {
         id: true,
@@ -121,39 +143,59 @@ export class NotificationService {
     await this.prisma.notification.update({
       where: { id: notification.id },
       data: {
-        isRead: true,
-        readAt: new Date(),
+        status: 'READ',
+        sentAt: new Date(),
       },
     });
 
     return { success: true };
   }
 
-  async sendInAppNotification(payload: Omit<NotificationPayload, 'type' | 'status'>): Promise<void> {
-    const created = await this.logNotification({
-      ...payload,
-      type: 'IN_APP',
-      status: 'SENT',
+  async sendInAppNotification(payload: Omit<NotificationPayload, 'channel' | 'status'>): Promise<void> {
+    const created = await this.jobService.runWithRetry('notification:in-app', async () => {
+      return this.logNotification({
+        ...payload,
+        channel: 'IN_APP',
+        status: 'SENT',
+      });
+    }, {
+      maxAttempts: 3,
+      context: {
+        userId: payload.userId ?? null,
+        organizationId: payload.organizationId,
+      },
     });
 
     this.realtime.emitNotificationCreated(payload.organizationId, created, payload.userId ?? null);
   }
 
   async sendEmailNotification(
-    payload: Omit<NotificationPayload, 'type' | 'status'> & { html: string; to: string },
+    payload: Omit<NotificationPayload, 'channel' | 'status'> & { html: string; to: string },
   ): Promise<void> {
     const created = await this.logNotification({
       ...payload,
-      type: 'EMAIL',
+      channel: 'EMAIL',
       status: 'PENDING',
     });
 
     try {
-      await this.emailService.send({
-        to: payload.to,
-        subject: payload.title,
-        html: payload.html,
-      });
+      await this.jobService.runWithRetry(
+        'notification:email',
+        async () => {
+          await this.emailService.send({
+            to: payload.to,
+            subject: payload.title,
+            html: payload.html,
+          });
+        },
+        {
+          maxAttempts: 3,
+          context: {
+            userId: payload.userId ?? null,
+            organizationId: payload.organizationId,
+          },
+        },
+      );
 
       await this.prisma.notification.update({
         where: { id: created.id },
@@ -168,19 +210,31 @@ export class NotificationService {
   }
 
   async sendSmsNotification(
-    payload: Omit<NotificationPayload, 'type' | 'status'> & { to: string },
+    payload: Omit<NotificationPayload, 'channel' | 'status'> & { to: string },
   ): Promise<void> {
     const created = await this.logNotification({
       ...payload,
-      type: 'SMS',
+      channel: 'SMS',
       status: 'PENDING',
     });
 
     try {
-      await this.smsService.send({
-        to: payload.to,
-        body: `${payload.title}: ${payload.message}`,
-      });
+      await this.jobService.runWithRetry(
+        'notification:sms',
+        async () => {
+          await this.smsService.send({
+            to: payload.to,
+            body: `${payload.title}: ${payload.message}`,
+          });
+        },
+        {
+          maxAttempts: 3,
+          context: {
+            userId: payload.userId ?? null,
+            organizationId: payload.organizationId,
+          },
+        },
+      );
 
       await this.prisma.notification.update({
         where: { id: created.id },
@@ -360,8 +414,14 @@ export class NotificationService {
     const admins = await this.prisma.user.findMany({
       where: {
         organizationId,
-        role: {
-          in: ['Admin', 'SuperAdmin', 'OrganizationAdmin'],
+        userRoles: {
+          some: {
+            role: {
+              name: {
+                in: ['Admin', 'SuperAdmin', 'OrganizationAdmin'],
+              },
+            },
+          },
         },
       },
       select: {
@@ -416,13 +476,11 @@ export class NotificationService {
       return await this.prisma.notification.create({
         data: {
           organizationId: payload.organizationId,
-          userId: payload.userId ?? null,
-          type: payload.type,
-          title: payload.title,
-          message: payload.message,
+          channel: payload.channel,
+          subject: payload.title,
+          body: payload.message,
           status: payload.status,
-          relatedEntityType: payload.relatedEntityType,
-          relatedEntityId: payload.relatedEntityId ?? null,
+          sentAt: payload.status === 'SENT' || payload.status === 'READ' ? new Date() : null,
         },
       });
     } catch (error) {

@@ -9,6 +9,7 @@ import {
 } from '@nestjs/websockets';
 import jwt from 'jsonwebtoken';
 import type { Server, Socket } from 'socket.io';
+import { academyEvents } from '@safeconnect/academy';
 
 interface SocketJwtPayload {
   sub: string;
@@ -117,10 +118,37 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       ...payloadValue,
       organizationId,
     });
+
+    this.server.to(this.organizationRoom(organizationId)).emit('courier.location.updated', {
+      ...payloadValue,
+      organizationId,
+    });
   }
 
   emitCourierStatusChanged(organizationId: string, payload: unknown): void {
     this.server.to(this.organizationRoom(organizationId)).emit('courier.status_changed', {
+      organizationId,
+      data: payload,
+    });
+  }
+
+  emitNotificationCreated(organizationId: string, payload: unknown, userId: string | null = null): void {
+    this.server.to(this.organizationRoom(organizationId)).emit('notification.created', {
+      organizationId,
+      userId,
+      data: payload,
+    });
+  }
+
+  emitAcademyCourseCompleted(organizationId: string, payload: unknown): void {
+    this.server.to(this.organizationRoom(organizationId)).emit(academyEvents.courseCompleted, {
+      organizationId,
+      data: payload,
+    });
+  }
+
+  emitAcademyCertificateIssued(organizationId: string, payload: unknown): void {
+    this.server.to(this.organizationRoom(organizationId)).emit(academyEvents.certificateIssued, {
       organizationId,
       data: payload,
     });

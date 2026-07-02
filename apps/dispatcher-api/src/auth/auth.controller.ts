@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
+import { RateLimit } from '@/reliability/rate-limit.decorator';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -20,6 +21,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import type { JwtUser } from './jwt.strategy';
 
 @Controller('auth')
+@RateLimit('strict')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 

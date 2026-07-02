@@ -55,6 +55,62 @@ enum NotificationStatus {
   READ
 }
 
+enum LogLevel {
+  INFO
+  WARN
+  ERROR
+  DEBUG
+}
+
+enum AcademyContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AcademyDifficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum AcademyEnrollmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+}
+
+enum AcademyQuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+}
+
+enum AcademyKnowledgeType {
+  ARTICLE
+  POLICY
+  MANUAL
+  FAQ
+  TROUBLESHOOTING
+  REFERENCE
+}
+
+enum AcademyAssetType {
+  VIDEO
+  PDF
+  FORM
+  DOWNLOAD
+}
+
+enum AcademyCertificateStatus {
+  ACTIVE
+  EXPIRED
+  PENDING_APPROVAL
+  REVOKED
+}
+
 enum SubscriptionStatus {
   TRIAL
   ACTIVE
@@ -90,6 +146,18 @@ model Organization {
   gpsLocations      GPSLocation[]
   settings          OrganizationSettings?
   analyticsSnapshot AnalyticsSnapshot[]
+  academyCategories AcademyCategory[]
+  academyCourses    AcademyCourse[]
+  academyLessons    AcademyLesson[]
+  academyPaths      AcademyLearningPath[]
+  academyEnrollments AcademyEnrollment[]
+  academyExams      AcademyExam[]
+  academyExamAttempts AcademyExamAttempt[]
+  academyCertificates AcademyCertificate[]
+  academyKnowledgeArticles AcademyKnowledgeArticle[]
+  academySops       AcademySop[]
+  academyManuals    AcademyManual[]
+  academyAssets     AcademyAsset[]
 }
 
 model User {
@@ -114,6 +182,17 @@ model User {
   courier                Courier?
   auditLogs              AuditLog[]
   userRoles              UserRole[]
+  academyInstructorCourses AcademyCourse[] @relation("AcademyInstructorCourses")
+  academyCreatedCourses  AcademyCourse[] @relation("AcademyCreatedCourses")
+  academyApprovedCourses AcademyCourse[] @relation("AcademyApprovedCourses")
+  academyCreatedLessons  AcademyLesson[] @relation("AcademyCreatedLessons")
+  academyApprovedLessons AcademyLesson[] @relation("AcademyApprovedLessons")
+  academyEnrollments     AcademyEnrollment[]
+  academyExamAttempts    AcademyExamAttempt[]
+  academyCertificates    AcademyCertificate[] @relation("AcademyCertificateOwners")
+  academyApprovedCertificates AcademyCertificate[] @relation("AcademyCertificateApprovers")
+  academyKnowledgeBookmarks AcademyBookmark[]
+  academySopOwnership    AcademySop[] @relation("AcademySopOwners")
 }
 
 model Role {
@@ -234,6 +313,383 @@ model Notification {
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
   organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model SystemLog {
+  id             String    @id @default(uuid())
+  level          LogLevel
+  message        String
+  stackTrace     String?
+  organizationId String?
+  userId         String?
+  createdAt      DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([organizationId])
+  @@index([userId])
+}
+
+model AcademyCategory {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  slug           String
+  description    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  courses        AcademyCourse[]
+
+  @@unique([organizationId, slug])
+}
+
+model AcademyCourse {
+  id             String               @id @default(uuid())
+  organizationId String
+  categoryId     String?
+  instructorId   String?
+  createdBy      String?
+  approvedBy     String?
+  title          String
+  slug           String
+  summary        String?
+  description    String?
+  status         AcademyContentStatus @default(DRAFT)
+  difficulty     AcademyDifficulty    @default(BEGINNER)
+  tags           String[]
+  estimatedMinutes Int                @default(30)
+  imageUrl       String?
+  versionNumber  Int                  @default(1)
+  isComplianceRequired Boolean        @default(false)
+  publishedAt    DateTime?
+  archivedAt     DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category       AcademyCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  instructor     User?                @relation("AcademyInstructorCourses", fields: [instructorId], references: [id], onDelete: SetNull)
+  createdByUser  User?                @relation("AcademyCreatedCourses", fields: [createdBy], references: [id], onDelete: SetNull)
+  approvedByUser User?                @relation("AcademyApprovedCourses", fields: [approvedBy], references: [id], onDelete: SetNull)
+  lessons        AcademyLesson[]
+  learningPathCourses AcademyLearningPathCourse[]
+  enrollments    AcademyEnrollment[]
+  exams          AcademyExam[]
+  certificates   AcademyCertificate[]
+  assets         AcademyAsset[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, status])
+}
+
+model AcademyLesson {
+  id             String               @id @default(uuid())
+  organizationId String
+  courseId       String
+  createdBy      String?
+  approvedBy     String?
+  title          String
+  slug           String
+  contentRichText Json?
+  videoUrl       String?
+  pdfUrl         String?
+  attachments    Json?
+  tags           String[]
+  estimatedMinutes Int                @default(10)
+  orderIndex     Int                  @default(1)
+  status         AcademyContentStatus @default(DRAFT)
+  versionNumber  Int                  @default(1)
+  publishedAt    DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  course         AcademyCourse        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdByUser  User?                @relation("AcademyCreatedLessons", fields: [createdBy], references: [id], onDelete: SetNull)
+  approvedByUser User?                @relation("AcademyApprovedLessons", fields: [approvedBy], references: [id], onDelete: SetNull)
+  progress       AcademyLessonProgress[]
+
+  @@unique([courseId, slug])
+  @@index([organizationId, status])
+}
+
+model AcademyLearningPath {
+  id             String               @id @default(uuid())
+  organizationId String
+  name           String
+  slug           String
+  description    String?
+  difficulty     AcademyDifficulty    @default(BEGINNER)
+  status         AcademyContentStatus @default(DRAFT)
+  estimatedMinutes Int                @default(60)
+  requiredForRoles String[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  courses        AcademyLearningPathCourse[]
+  enrollments    AcademyEnrollment[]
+  certificates   AcademyCertificate[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, status])
+}
+
+model AcademyLearningPathCourse {
+  id             String   @id @default(uuid())
+  learningPathId String
+  courseId       String
+  orderIndex     Int      @default(1)
+  isRequired     Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  learningPath   AcademyLearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+  course         AcademyCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([learningPathId, courseId])
+  @@index([learningPathId, orderIndex])
+}
+
+model AcademyEnrollment {
+  id             String                 @id @default(uuid())
+  organizationId String
+  userId         String
+  courseId       String?
+  learningPathId String?
+  assignedBy     String?
+  status         AcademyEnrollmentStatus @default(ASSIGNED)
+  progressPercent Float                 @default(0)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  dueAt          DateTime?
+  managerComments String?
+  hoursCompleted Float                  @default(0)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course         AcademyCourse?         @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  learningPath   AcademyLearningPath?   @relation(fields: [learningPathId], references: [id], onDelete: SetNull)
+  lessonProgress AcademyLessonProgress[]
+
+  @@index([organizationId, userId])
+}
+
+model AcademyLessonProgress {
+  id             String   @id @default(uuid())
+  enrollmentId   String
+  lessonId       String
+  completed      Boolean  @default(false)
+  score          Float?
+  completedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  enrollment     AcademyEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lesson         AcademyLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, lessonId])
+}
+
+model AcademyExam {
+  id             String               @id @default(uuid())
+  organizationId String
+  courseId       String
+  title          String
+  instructions   String?
+  passingScore   Float                @default(70)
+  timeLimitMinutes Int                @default(30)
+  randomizeQuestions Boolean          @default(true)
+  maxAttempts    Int                  @default(3)
+  status         AcademyContentStatus @default(DRAFT)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  course         AcademyCourse        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions      AcademyExamQuestion[]
+  attempts       AcademyExamAttempt[]
+
+  @@index([organizationId, status])
+}
+
+model AcademyExamQuestion {
+  id             String              @id @default(uuid())
+  examId         String
+  questionText   String
+  questionType   AcademyQuestionType @default(MULTIPLE_CHOICE)
+  options        Json?
+  correctAnswer  String
+  explanation    String?
+  points         Float               @default(1)
+  orderIndex     Int                 @default(1)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  exam           AcademyExam         @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@index([examId, orderIndex])
+}
+
+model AcademyExamAttempt {
+  id             String   @id @default(uuid())
+  organizationId String
+  examId         String
+  userId         String
+  attemptNumber  Int      @default(1)
+  score          Float    @default(0)
+  percentage     Float    @default(0)
+  passed         Boolean  @default(false)
+  startedAt      DateTime @default(now())
+  submittedAt    DateTime?
+  answers        Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  exam           AcademyExam @relation(fields: [examId], references: [id], onDelete: Cascade)
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, userId])
+  @@index([examId, userId])
+}
+
+model AcademyCertificate {
+  id             String                   @id @default(uuid())
+  organizationId String
+  userId         String
+  courseId       String?
+  learningPathId String?
+  approvedBy     String?
+  verificationNumber String              @unique
+  status         AcademyCertificateStatus @default(PENDING_APPROVAL)
+  issuedAt       DateTime?
+  expiresAt      DateTime?
+  renewedAt      DateTime?
+  managerApprovalRequired Boolean        @default(true)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User                    @relation("AcademyCertificateOwners", fields: [userId], references: [id], onDelete: Cascade)
+  course         AcademyCourse?          @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  learningPath   AcademyLearningPath?    @relation(fields: [learningPathId], references: [id], onDelete: SetNull)
+  approvedByUser User?                   @relation("AcademyCertificateApprovers", fields: [approvedBy], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, userId])
+}
+
+model AcademyKnowledgeArticle {
+  id             String               @id @default(uuid())
+  organizationId String
+  title          String
+  slug           String
+  type           AcademyKnowledgeType @default(ARTICLE)
+  category       String?
+  tags           String[]
+  body           String
+  relatedArticleIds String[]
+  status         AcademyContentStatus @default(DRAFT)
+  versionNumber  Int                  @default(1)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bookmarks      AcademyBookmark[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, type, status])
+}
+
+model AcademyBookmark {
+  id          String   @id @default(uuid())
+  userId      String
+  articleId   String
+  createdAt   DateTime @default(now())
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  article     AcademyKnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, articleId])
+}
+
+model AcademySop {
+  id             String               @id @default(uuid())
+  organizationId String
+  ownerId        String?
+  sopNumber      String
+  department     String
+  revisionNumber String
+  effectiveDate  DateTime
+  approvalStatus String
+  title          String
+  summary        String?
+  instructions   String
+  attachments    Json?
+  forms          Json?
+  downloads      Json?
+  revisionHistory Json?
+  status         AcademyContentStatus @default(DRAFT)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner          User?                @relation("AcademySopOwners", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, sopNumber])
+  @@index([organizationId, department, status])
+}
+
+model AcademyManual {
+  id             String               @id @default(uuid())
+  organizationId String
+  manualType     String
+  title          String
+  slug           String
+  description    String?
+  versionNumber  Int                  @default(1)
+  status         AcademyContentStatus @default(DRAFT)
+  pdfUrl         String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  chapters       AcademyManualChapter[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, status])
+}
+
+model AcademyManualChapter {
+  id             String   @id @default(uuid())
+  manualId       String
+  title          String
+  orderIndex     Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  manual         AcademyManual @relation(fields: [manualId], references: [id], onDelete: Cascade)
+  sections       AcademyManualSection[]
+
+  @@index([manualId, orderIndex])
+}
+
+model AcademyManualSection {
+  id             String   @id @default(uuid())
+  chapterId      String
+  title          String
+  content        String
+  orderIndex     Int      @default(1)
+  attachments    Json?
+  videoUrl       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  chapter        AcademyManualChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@index([chapterId, orderIndex])
+}
+
+model AcademyAsset {
+  id             String           @id @default(uuid())
+  organizationId String
+  courseId       String?
+  title          String
+  assetType      AcademyAssetType
+  url            String
+  mimeType       String?
+  tags           String[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  course         AcademyCourse?   @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, assetType])
 }
 
 model AuditLog {

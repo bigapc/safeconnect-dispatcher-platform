@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@safeconnect/ui';
-import { Activity, AlertTriangle, LayoutDashboard, MapPinned, PackageCheck } from 'lucide-react';
+import { Activity, AlertTriangle, GraduationCap, LayoutDashboard, MapPinned, PackageCheck } from 'lucide-react';
 import type { Route } from 'next';
 
 const items = [
@@ -12,6 +12,7 @@ const items = [
   { href: '/maps' as Route, label: 'Maps', icon: MapPinned },
   { href: '/incidents' as Route, label: 'Incidents', icon: AlertTriangle },
   { href: '/live' as Route, label: 'Live Activity', icon: Activity },
+  { href: '/academy' as Route, label: 'APC SafeConnect Academy', icon: GraduationCap },
 ];
 
 export const Sidebar = () => {

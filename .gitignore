@@ -2,6 +2,10 @@ node_modules
 .env
 .env.*
 !.env.example
+!.env.development
+!.env.production
+!apps/dispatcher-web/.env.development
+!apps/dispatcher-web/.env.production
 .next
 dist
 coverage

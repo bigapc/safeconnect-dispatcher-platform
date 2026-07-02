@@ -20,7 +20,8 @@
       "@/*": ["./*"],
       "@safeconnect/ui": ["../../packages/ui/src"],
       "@safeconnect/config": ["../../packages/config/src"],
-      "@safeconnect/maps": ["../../packages/maps/src"]
+      "@safeconnect/maps": ["../../packages/maps/src"],
+      "@safeconnect/academy": ["../../packages/academy/src"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

@@ -11,7 +11,10 @@
     "dev": "turbo run dev --parallel",
     "build": "turbo run build",
     "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:coverage": "turbo run test:coverage",
     "typecheck": "turbo run typecheck",
+    "audit": "npm audit --audit-level=high",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "prepare": "husky"
   },

@@ -1,9 +1,11 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { PrismaService } from '@/prisma/prisma.service';
+import { RateLimit } from '@/reliability/rate-limit.decorator';
 
 @Controller('dashboard')
 @UseGuards(JwtAuthGuard)
+@RateLimit('light')
 export class DashboardController {
   constructor(private readonly prisma: PrismaService) {}
 

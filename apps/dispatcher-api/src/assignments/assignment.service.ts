@@ -4,9 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import type { AssignmentPriority, AssignmentStatus, Prisma } from '@prisma/client';
 import { AiDispatchService } from '@/ai-dispatch/ai-dispatch.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RealtimeGateway } from '@/realtime/realtime.gateway';
+import { JobService } from '@/reliability/job.service';
 import { AssignCourierDto } from './dto/assign-courier.dto';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { AssignmentStatusDto, UpdateAssignmentStatusDto } from './dto/update-assignment-status.dto';
@@ -33,6 +35,7 @@ export class AssignmentService {
     private readonly aiDispatchService: AiDispatchService,
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
+    private readonly jobService: JobService,
   ) {}
 
   async createAssignment(user: JwtRequestUser, dto: CreateAssignmentDto): Promise<unknown> {
@@ -76,7 +79,24 @@ export class AssignmentService {
     const formatted = this.formatAssignment(assignment);
     this.realtime.emitAssignmentCreated(organizationId, formatted);
 
-    const recommendationResult = await this.aiDispatchService.recommendCourierForAssignment(user, assignment.id);
+    const recommendationResult = await this.jobService
+      .runWithRetry(
+        'ai-dispatch:recommend-courier',
+        async () => this.aiDispatchService.recommendCourierForAssignment(user, assignment.id),
+        {
+          maxAttempts: 3,
+          context: {
+            userId: user.sub,
+            organizationId,
+          },
+        },
+      )
+      .catch(() => ({
+        assignmentId: assignment.id,
+        recommendations: [],
+        recommendedCourier: null,
+        message: 'AI recommendation temporarily unavailable',
+      }));
 
     return {
       ...formatted,
@@ -86,33 +106,77 @@ export class AssignmentService {
     };
   }
 
-  async getAssignmentsByOrg(user: JwtRequestUser) {
+  async getAssignmentsByOrg(
+    user: JwtRequestUser,
+    filters?: {
+      page?: number;
+      limit?: number;
+      status?: string;
+      priority?: string;
+      sortBy?: string;
+      sortOrder?: string;
+    },
+  ) {
     const organizationId = this.requireOrganization(user);
 
-    const assignments = await this.prisma.assignment.findMany({
-      where: {
-        organizationId,
-      },
-      include: {
-        courier: {
-          select: {
-            id: true,
-            isOnline: true,
-            user: {
-              select: {
-                firstName: true,
-                lastName: true,
+    const page = filters?.page && filters.page > 0 ? filters.page : 1;
+    const limit = filters?.limit && filters.limit > 0 ? Math.min(filters.limit, 100) : 25;
+    const skip = (page - 1) * limit;
+    const sortBy = filters?.sortBy === 'updatedAt' ? 'updatedAt' : 'createdAt';
+    const sortOrder = filters?.sortOrder?.toLowerCase() === 'asc' ? 'asc' : 'desc';
+
+    const parsedStatus = this.parseAssignmentStatus(filters?.status);
+    const parsedPriority = this.parseAssignmentPriority(filters?.priority);
+
+    const where: Prisma.AssignmentWhereInput = {
+      organizationId,
+      ...(parsedStatus
+        ? {
+            status: parsedStatus,
+          }
+        : {}),
+      ...(parsedPriority
+        ? {
+            priority: parsedPriority,
+          }
+        : {}),
+    };
+
+    const [total, assignments] = await this.prisma.$transaction([
+      this.prisma.assignment.count({
+        where,
+      }),
+      this.prisma.assignment.findMany({
+        where,
+        include: {
+          courier: {
+            select: {
+              id: true,
+              isOnline: true,
+              user: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                },
               },
             },
           },
         },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+        orderBy: {
+          [sortBy]: sortOrder,
+        },
+        skip,
+        take: limit,
+      }),
+    ]);
 
-    return assignments.map((assignment) => this.formatAssignment(assignment));
+    return {
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      data: assignments.map((assignment) => this.formatAssignment(assignment)),
+    };
   }
 
   async assignCourier(user: JwtRequestUser, assignmentId: string, dto: AssignCourierDto) {
@@ -214,31 +278,61 @@ export class AssignmentService {
     return formatted;
   }
 
-  async listCouriers(user: JwtRequestUser) {
+  async listCouriers(
+    user: JwtRequestUser,
+    filters?: {
+      page?: number;
+      limit?: number;
+      onlineOnly?: boolean;
+      sortOrder?: string;
+    },
+  ) {
     const organizationId = this.requireOrganization(user);
 
-    const couriers = await this.prisma.courier.findMany({
-      where: {
-        organizationId,
-      },
-      select: {
-        id: true,
-        isOnline: true,
-        user: {
-          select: {
-            firstName: true,
-            lastName: true,
+    const page = filters?.page && filters.page > 0 ? filters.page : 1;
+    const limit = filters?.limit && filters.limit > 0 ? Math.min(filters.limit, 100) : 25;
+    const skip = (page - 1) * limit;
+    const sortOrder = filters?.sortOrder?.toLowerCase() === 'desc' ? 'desc' : 'asc';
+    const where = {
+      organizationId,
+      ...(filters?.onlineOnly
+        ? {
+            isOnline: true,
+          }
+        : {}),
+    };
+
+    const [total, couriers] = await this.prisma.$transaction([
+      this.prisma.courier.count({ where }),
+      this.prisma.courier.findMany({
+        where,
+        select: {
+          id: true,
+          isOnline: true,
+          user: {
+            select: {
+              firstName: true,
+              lastName: true,
+            },
           },
         },
-      },
-      orderBy: [{ user: { firstName: 'asc' } }, { user: { lastName: 'asc' } }],
-    });
+        orderBy: [{ user: { firstName: sortOrder } }, { user: { lastName: sortOrder } }],
+        skip,
+        take: limit,
+      }),
+    ]);
 
-    return couriers.map((courier) => ({
-      id: courier.id,
-      name: `${courier.user.firstName} ${courier.user.lastName}`.trim(),
-      isOnline: courier.isOnline,
-    }));
+    return {
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      data: couriers.map((courier) => ({
+        id: courier.id,
+        name: `${courier.user.firstName} ${courier.user.lastName}`.trim(),
+        isOnline: courier.isOnline,
+      })),
+    };
   }
 
   private requireOrganization(user: JwtRequestUser): string {
@@ -283,6 +377,28 @@ export class AssignmentService {
     }
   }
 
+  private parseAssignmentStatus(value?: string): AssignmentStatus | undefined {
+    if (!value) {
+      return undefined;
+    }
+
+    const normalized = value.toUpperCase();
+    const statuses: AssignmentStatus[] = ['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+    return statuses.includes(normalized as AssignmentStatus) ? (normalized as AssignmentStatus) : undefined;
+  }
+
+  private parseAssignmentPriority(value?: string): AssignmentPriority | undefined {
+    if (!value) {
+      return undefined;
+    }
+
+    const normalized = value.toUpperCase();
+    const priorities: AssignmentPriority[] = ['LOW', 'MEDIUM', 'HIGH'];
+    return priorities.includes(normalized as AssignmentPriority)
+      ? (normalized as AssignmentPriority)
+      : undefined;
+  }
+
   private formatAssignment(assignment: {
     id: string;
     title: string;
@@ -297,7 +413,7 @@ export class AssignmentService {
     priority: string;
     createdAt: Date;
     updatedAt: Date;
-    courier: {
+    courier?: {
       id: string;
       isOnline: boolean;
       user: {

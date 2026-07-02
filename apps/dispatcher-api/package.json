@@ -8,7 +8,10 @@
     "start": "node dist/main",
     "lint": "eslint src",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "jest"
+    "test": "jest --config jest.config.ts",
+    "test:unit": "jest --config jest.config.ts --selectProjects unit",
+    "test:integration": "jest --config jest.config.ts --selectProjects integration",
+    "test:coverage": "jest --config jest.config.ts --coverage"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.3",
@@ -45,8 +48,10 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.15",
     "@types/passport-jwt": "^4.0.1",
+    "@types/supertest": "^6.0.3",
     "jest": "^30.0.5",
     "prisma": "^6.12.0",
+    "supertest": "^7.1.1",
     "ts-jest": "^29.4.0",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0"
